@@ -14,16 +14,25 @@
  * limitations under the License.
  */
 
-#pragma once
+#include <folly/fibers/BatchSemaphore.h>
+#include <folly/portability/GTest.h>
 
-#include <folly/Portability.h>
+TEST(BatchSemaphoreTest, WaitSignalSynchronization) {
+  folly::fibers::BatchSemaphore sem{0};
 
-// Disable a couple of warnings due to GTest exporting classes
-// that derive from stdlib classes which aren't explicitly exported.
-FOLLY_PUSH_WARNING
-FOLLY_MSVC_DISABLE_WARNING(4251)
-FOLLY_MSVC_DISABLE_WARNING(4275)
-// IWYU pragma: begin_exports
-#include <gtest/gtest.h>
-// IWYU pragma: end_exports
-FOLLY_POP_WARNING
+  int64_t data = 0;
+  folly::relaxed_atomic_bool signalled = false;
+
+  std::jthread t{[&]() {
+    while (!signalled) {
+      std::this_thread::yield();
+    }
+
+    sem.wait(1);
+    EXPECT_NE(data, 0);
+  }};
+
+  data = 1;
+  sem.signal(1);
+  signalled = true;
+}
